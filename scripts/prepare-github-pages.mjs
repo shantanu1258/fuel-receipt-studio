@@ -12,7 +12,10 @@ const publicAssets = [
   "press-start-2p-latin.woff2",
   "nunito-sans-latin.woff2",
   "vt323-latin.woff2",
-  "shell-paper-logo-color.png",
+  "dotgothic16-latin.woff2",
+  "fake-receipt-condensed.woff2",
+  "share-tech-mono-latin.woff2",
+  "shell-paper-logo-mono.png",
 ];
 
 async function collectFiles(directory) {

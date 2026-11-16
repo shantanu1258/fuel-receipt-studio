@@ -1,6 +1,8 @@
 export type ShellFields = {
   siteId: string;
   posNumber: string;
+  showPos: boolean;
+  invoiceSubtext: string;
   cashierName: string;
   fssaiNumber: string;
   shellProductName: string;
@@ -18,6 +20,8 @@ export type ShellFields = {
 export const shellDefaults: ShellFields = {
   siteId: "",
   posNumber: "",
+  showPos: true,
+  invoiceSubtext: "",
   cashierName: "",
   fssaiNumber: "",
   shellProductName: "",

@@ -1,0 +1,21 @@
+Fake Receipt Condensed
+
+Based on Fake Receipt by Ray Larabie / Typodermic Fonts.
+The source font is released under CC0 1.0 Universal (public-domain dedication),
+which permits commercial use, modification, redistribution and web embedding.
+
+Designer and license information:
+https://typodermicfonts.com/public-domain/#fake-receipt
+https://creativecommons.org/publicdomain/zero/1.0/
+https://creativecommons.org/publicdomain/zero/1.0/legalcode
+
+Source archive:
+https://typodermicfonts.com/assets/downloads/cc0-fonts/fake-receipt.zip
+
+This bundled derivative scales the source font's horizontal outlines and advance
+widths to 70%, retains its vertical metrics, and is converted to WOFF2. It is
+renamed Fake Receipt Condensed. The changes are also dedicated under CC0 1.0.
+It is a visual approximation, not an extracted or verified printer firmware font.
+
+The font is provided as-is, without warranties. No endorsement by Typodermic
+Fonts, the designer, or any printer manufacturer is implied.

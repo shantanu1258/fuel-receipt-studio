@@ -3,8 +3,20 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { calculateShellSale, formatShellDate, shellDefaults } from "../app/shell.ts";
 
+test("the receipt font is bundled as a licensed webfont", async () => {
+  const [font, license, css] = await Promise.all([
+    readFile(new URL("../public/dotgothic16-latin.woff2", import.meta.url)),
+    readFile(new URL("../public/dotgothic16-OFL.txt", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.equal(font.toString("ascii", 0, 4), "wOF2");
+  assert.match(license, /SIL OPEN FONT LICENSE Version 1\.1/);
+  assert.match(license, /DotGothic16 Project Authors/);
+  assert.match(css, /url\("\/dotgothic16-latin\.woff2"\) format\("woff2"\)/);
+});
+
 test("the bundled Shell paper emblem is a transparent PNG", async () => {
-  const png = await readFile(new URL("../public/shell-paper-logo-color.png", import.meta.url));
+  const png = await readFile(new URL("../public/shell-paper-logo-mono.png", import.meta.url));
   assert.deepEqual(png.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   assert.equal(png.toString("ascii", 12, 16), "IHDR");
   assert.equal(png[25], 6);
@@ -48,6 +60,8 @@ test("new fields default safely for older saved receipts", () => {
   assert.equal(shellDefaults.discountAmount, "");
   assert.equal(shellDefaults.loyaltyCustomerId, "");
   assert.equal(shellDefaults.siteId, "");
+  assert.equal(shellDefaults.invoiceSubtext, "");
+  assert.equal(shellDefaults.showPos, true);
   assert.equal(shellDefaults.shellPaperWidth, "80");
   assert.equal(calculateShellSale(2500, shellDefaults.discountAmount).netTotal, 2500);
 });

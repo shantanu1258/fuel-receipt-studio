@@ -2243,6 +2243,7 @@ a {
   .editor-panel,
   .preview-panel > .panel-heading,
   .template-picker,
+  .receipt-font-picker,
   .preview-note,
   .history-section,
   .developer-strip,
@@ -2309,6 +2310,59 @@ a {
   font-weight: 400;
   font-display: swap;
   src: url("/vt323-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Shell Receipt Bitmap";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/dotgothic16-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Fake Receipt Condensed";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fake-receipt-condensed.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Share Tech Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/share-tech-mono-latin.woff2") format("woff2");
+}
+
+.receipt-font-picker {
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.receipt-stage[data-font]:not([data-font="default"]) #receipt {
+  font-family: var(--receipt-font);
+  letter-spacing: normal;
+  overflow-wrap: anywhere;
+}
+
+.receipt-stage[data-font]:not([data-font="default"]) #receipt :is(p, span, th, td, h3, h6) {
+  min-width: 0;
+}
+
+.receipt-stage[data-font]:not([data-font="default"]) .legacy-slip-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.receipt-stage[data-font]:not([data-font="default"]) .legacy-slip-row-three {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.75fr) minmax(0, 0.65fr);
+}
+
+.receipt-stage[data-font]:not([data-font="default"]) .template5-row,
+.receipt-stage[data-font]:not([data-font="default"]) .template5-footer {
+  white-space: normal;
 }
 
 .field-span-two {
@@ -2946,6 +3000,14 @@ a {
   margin: 0 0 12px;
 }
 
+.pdf-privacy-note {
+  margin: 0;
+  padding: 0 28px 24px;
+  color: var(--ink-soft);
+  font-size: 0.73rem;
+  line-height: 1.6;
+}
+
 .legacy-receipt-stage[data-template="shell"] {
   justify-content: flex-start;
   overflow-x: auto;
@@ -2956,12 +3018,14 @@ a {
 .shell-receipt {
   flex: 0 0 auto;
   margin-inline: auto;
-  padding: 3.4em 0.7em 2.2em;
+  padding: 3.8em 0.6em 2.2em;
   overflow: hidden;
   background: #fff;
-  color: #303033;
+  color: #303030;
   font-family: "Thermal VT323", "Courier New", monospace;
   font-weight: 400;
+  font-kerning: none;
+  font-variant-ligatures: none;
   line-height: 1.12;
   -webkit-font-smoothing: auto;
 }
@@ -2989,20 +3053,21 @@ a {
 
 .shell-paper-emblems {
   position: absolute;
-  inset: -2.6em 0 0.8em;
+  inset: -2.2em 0 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  opacity: 0.055;
+  gap: 4.3em;
+  overflow: hidden;
+  opacity: 0.07;
   pointer-events: none;
 }
 
 .shell-paper-emblem {
   flex: 0 0 auto;
-  width: 5.25em;
-  height: 4.875em;
-  background: url("/shell-paper-logo-color.png") center / contain no-repeat;
+  width: 5.4em;
+  height: 5.1em;
+  background: url("/shell-paper-logo-mono.png") center / contain no-repeat;
 }
 
 .shell-separator {
@@ -3045,6 +3110,15 @@ a {
   text-align: right;
 }
 
+.shell-transaction .shell-invoice-reference {
+  max-width: 45%;
+}
+
+.shell-invoice-subtext {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .shell-fuel {
   margin-top: 2.7em;
 }
@@ -3055,6 +3129,7 @@ a {
 
 .shell-discount {
   margin-top: 1.6em;
+  column-gap: 0.3em;
 }
 
 .shell-totals {

@@ -1,12 +1,14 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState, type CSSProperties } from "react";
 import { calculateShellSale, formatShellDate, shellDefaults, type ShellFields } from "./shell";
+import { getReceiptFont, receiptFonts, type ReceiptFontId } from "./receipt-fonts";
 
 type FuelType = "Petrol" | "Diesel" | "CNG" | "EV Charge";
 type TemplateId = "template1" | "template2" | "template3" | "template4" | "template5" | "shell";
 
 type BillForm = ShellFields & {
+  receiptFont: ReceiptFontId;
   stationName: string;
   dealerName: string;
   stationAddress: string;
@@ -83,9 +85,17 @@ const receiptTemplates: Array<{
   { id: "shell", name: "Shell", description: "Station receipt" },
 ];
 
+const templateDefaultFonts: Record<TemplateId, ReceiptFontId> = {
+  template1: "arial",
+  template2: "nunito",
+  template3: "press-start",
+  template4: "press-start",
+  template5: "vt323",
+  shell: "vt323",
+};
+
 const shellDetailFields = [
   { key: "siteId", label: "Site ID", placeholder: "e.g. 12170818" },
-  { key: "posNumber", label: "POS number", placeholder: "e.g. 1" },
   { key: "fssaiNumber", label: "FSSAI number", placeholder: "Station food licence number" },
   { key: "cashierName", label: "Cashier / operator", placeholder: "Operator name" },
   { key: "fipNo", label: "Pump number", placeholder: "e.g. 04" },
@@ -105,6 +115,7 @@ const sourceRepositoryUrl = "https://github.com/shantanu1258/fuel-receipt-studio
 
 const initialForm: BillForm = {
   ...shellDefaults,
+  receiptFont: "default",
   stationName: "GREENWAY FUEL STATION",
   dealerName: "GREENWAY AUTO SERVICES",
   stationAddress: "MAIN ROAD, BENGALURU 560001",
@@ -185,6 +196,7 @@ function normalizeStoredForm(value: unknown): BillForm | null {
   }
 
   const form = normalized as unknown as BillForm;
+  form.receiptFont = getReceiptFont(form.receiptFont).id;
   if (!fuelOptions.some((option) => option.value === form.fuelType)) {
     form.fuelType = initialForm.fuelType;
   }
@@ -400,6 +412,11 @@ export default function Home() {
 
   const selectedFuel =
     fuelOptions.find((option) => option.value === form.fuelType) ?? fuelOptions[0];
+  const selectedFont = getReceiptFont(form.receiptFont);
+  const defaultFont = getReceiptFont(templateDefaultFonts[template]);
+  const receiptFontStyle: CSSProperties & { "--receipt-font": string } = {
+    "--receipt-font": selectedFont.family,
+  };
   const rate = cleanNumber(form.rate);
   const total = cleanNumber(form.total);
   const quantity = rate > 0 && total > 0 ? total / rate : 0;
@@ -654,9 +671,9 @@ export default function Home() {
 
     try {
       await document.fonts?.ready;
-      const [{ toPng }, { jsPDF }] = await Promise.all([
+      const [{ toPng }, { createReceiptPdf }] = await Promise.all([
         import("html-to-image"),
-        import("jspdf"),
+        import("./receipt-pdf"),
       ]);
       const bounds = receipt.getBoundingClientRect();
       const receiptWidth = Math.ceil(Math.max(bounds.width, receipt.scrollWidth));
@@ -682,24 +699,23 @@ export default function Home() {
         ? Number(form.shellPaperWidth) * 72 / 25.4
         : receiptWidth * pixelsToPoints;
       const pageHeight = receiptHeight * pageWidth / receiptWidth;
-      const pdf = new jsPDF({
-        orientation: pageWidth > pageHeight ? "landscape" : "portrait",
-        unit: "pt",
-        format: [pageWidth, pageHeight],
-        compress: true,
-      });
-      pdf.setProperties({
-        title: `Fuel receipt ${form.invoiceNumber}`,
-        subject: `${form.stationName} fuel receipt`,
-        creator: "Fuel Receipt Studio",
-      });
-      pdf.addImage(receiptPng, "PNG", 0, 0, pageWidth, pageHeight, undefined, "FAST");
+      const pdfBytes = await createReceiptPdf(receiptPng, pageWidth, pageHeight);
 
       const safeReceiptNumber = form.invoiceNumber
         .trim()
         .replace(/[^a-z0-9_-]+/gi, "-")
         .replace(/^-+|-+$/g, "") || "receipt";
-      pdf.save(`fuel-receipt-${safeReceiptNumber}.pdf`);
+      const url = URL.createObjectURL(new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `fuel-receipt-${safeReceiptNumber}.pdf`;
+      document.body.append(link);
+      try {
+        link.click();
+      } finally {
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
 
       const historyResult = saveCurrentReceipt();
       if (historyResult === "failed") {
@@ -737,11 +753,12 @@ export default function Home() {
           ? [`${form.taxMode === "GST TIN" ? "GSTIN" : taxLabel(form.taxMode)}: ${form.taxValue}`]
           : []),
         ...(form.fssaiNumber ? [`FSSAI: ${form.fssaiNumber}`] : []),
-        ...(form.posNumber ? [`POS: ${form.posNumber}`] : []),
+        ...(form.showPos && form.posNumber ? [`POS: ${form.posNumber}`] : []),
         ...(form.cashierName ? [`Cashier: ${form.cashierName}`] : []),
         ...(form.fipNo ? [`Pump: ${form.fipNo}`] : []),
       ] : []),
       `Receipt: ${form.invoiceNumber}`,
+      ...(template === "shell" && form.invoiceSubtext ? [form.invoiceSubtext] : []),
       `Date: ${formatDate(form.billDate)} ${form.billTime}`,
       ...(form.showCustomerName
         ? [`Customer: ${form.customerName || "Walk-in customer"}`]
@@ -788,6 +805,7 @@ export default function Home() {
     removeLogo();
     setForm({
       ...initialForm,
+      receiptFont: form.receiptFont,
       stationName: "Shell Bellandur",
       dealerName: "AVIGHNA ENTERPRISES",
       stationAddress: "No.80/2, Next to Hotel Citrus, ORR,\nBellandur, Bangalore-560 037",
@@ -1230,6 +1248,35 @@ export default function Home() {
               <fieldset className="form-section">
                 <legend>Shell receipt details</legend>
                 <div className="field-grid two">
+                  <div className="field field-span-two">
+                    <div className="field-label-row">
+                      <label htmlFor="shell-pos-number">POS number</label>
+                      <label className="receipt-visibility-toggle">
+                        <input
+                          type="checkbox"
+                          checked={form.showPos}
+                          onChange={(event) => updateField("showPos", event.target.checked)}
+                        />
+                        <span>Show POS beside date</span>
+                      </label>
+                    </div>
+                    <input
+                      id="shell-pos-number"
+                      value={form.posNumber}
+                      disabled={!form.showPos}
+                      onChange={(event) => updateField("posNumber", event.target.value)}
+                      placeholder="e.g. 1"
+                    />
+                  </div>
+                  <label className="field field-span-two">
+                    <span>Subtext below invoice number</span>
+                    <textarea
+                      value={form.invoiceSubtext}
+                      onChange={(event) => updateField("invoiceSubtext", event.target.value)}
+                      rows={2}
+                      placeholder="Optional reference or note"
+                    />
+                  </label>
                   {shellDetailFields.map((field) => (
                     <label className="field" key={field.key}>
                       <span>{field.label}</span>
@@ -1265,6 +1312,8 @@ export default function Home() {
                   Leave optional fields blank to omit them. The fuel-line label can differ
                   from the payment method in the totals, as in the supplied photo.
                   Printed fuel description overrides the fuel name only on this template.
+                  {" "}Cashier / operator already prints below the invoice number;
+                  subtext adds a separate optional line.
                 </p>
               </fieldset>
             )}
@@ -1447,6 +1496,13 @@ export default function Home() {
             <p className={`form-status ${canExport ? "ready" : "needs-input"}`} role="status">
               <span /> {message}
             </p>
+            <p className="pdf-privacy-note">
+              PDF downloads omit embedded document metadata (author, software or timestamps).
+              Your browser or Mac may still record the download URL under “Where from”;
+              this website cannot remove that file attribute. The PDF format version
+              remains required. Browser Print / Save as PDF may add its own metadata.
+              Visible receipt details and the filename are unchanged.
+            </p>
           </form>
 
           <aside className="preview-panel panel" aria-labelledby="preview-heading">
@@ -1478,7 +1534,40 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="receipt-stage legacy-receipt-stage" data-template={template}>
+            <div className="receipt-font-picker">
+              <label className="field" htmlFor="receipt-font">
+                <span>Receipt font</span>
+                <select
+                  id="receipt-font"
+                  value={form.receiptFont}
+                  onChange={(event) => updateField("receiptFont", getReceiptFont(event.target.value).id)}
+                  aria-describedby="receipt-font-help"
+                >
+                  {receiptFonts.map((font) => (
+                    <option key={font.id} value={font.id}>
+                      {font.id === "default" ? `Template default (${defaultFont.name})` : font.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p id="receipt-font-help" className="logo-help">
+                {selectedFont.id === "default"
+                  ? "Uses this layout's original font. Shell defaults to VT323."
+                  : selectedFont.id === "fake-receipt"
+                    ? "Fake Receipt renders lowercase letters as capitals."
+                    : selectedFont.asset
+                      ? "Bundled font. Used in the preview, print and PDF."
+                      : "System font. Appearance may vary when it is not installed."}
+                {" "}Your choice is saved with the receipt.
+              </p>
+            </div>
+
+            <div
+              className="receipt-stage legacy-receipt-stage"
+              data-template={template}
+              data-font={selectedFont.id}
+              style={receiptFontStyle}
+            >
               {template === "template1" && (
                 <TemplateOneReceipt
                   form={form}
@@ -2175,7 +2264,7 @@ function ShellReceipt({
   const unit = fuelOptions.find((fuel) => fuel.value === form.fuelType)?.unit || "L";
   const netAmount = sale.netTotal === null ? "--" : sale.netTotal.toFixed(2);
   const idLabel = form.taxMode === "GST TIN" ? "GSTIN" : taxLabel(form.taxMode);
-  const separator = "*".repeat(42);
+  const separator = "*".repeat(40);
 
   return (
     <article
@@ -2186,7 +2275,7 @@ function ShellReceipt({
     >
       {form.showShellWatermarks && (
         <div className="shell-paper-emblems" aria-hidden="true">
-          {[0, 1, 2, 3].map((index) => <span className="shell-paper-emblem" key={index} />)}
+          {[0, 1, 2, 3, 4, 5].map((index) => <span className="shell-paper-emblem" key={index} />)}
         </div>
       )}
       <div className="shell-content">
@@ -2207,8 +2296,11 @@ function ShellReceipt({
 
         <p className="shell-separator" aria-hidden="true">{separator}</p>
         <div className="shell-row shell-transaction">
-          <span>{formatShellDate(form.billDate)} {form.billTime}{form.posNumber && ` POS:${form.posNumber}`}</span>
-          <span>#{form.invoiceNumber.replace(/^#/, "")}</span>
+          <span>{formatShellDate(form.billDate)} {form.billTime}{form.showPos && form.posNumber && ` POS:${form.posNumber}`}</span>
+          <div className="shell-invoice-reference">
+            <p>#{form.invoiceNumber.replace(/^#/, "")}</p>
+            {form.invoiceSubtext && <p className="shell-invoice-subtext">{form.invoiceSubtext}</p>}
+          </div>
         </div>
         {form.cashierName && <p className="shell-cashier">{form.cashierName}</p>}
 
