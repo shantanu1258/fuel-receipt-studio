@@ -884,7 +884,7 @@ a {
 
 .template-picker {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   padding: 18px 22px;
   border-bottom: 1px solid rgba(16, 35, 34, 0.15);
@@ -2935,6 +2935,145 @@ a {
   white-space: nowrap;
 }
 
+.shell-template-help {
+  padding: 0 28px 22px;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.shell-template-help p {
+  margin: 0 0 12px;
+}
+
+.legacy-receipt-stage[data-template="shell"] {
+  justify-content: flex-start;
+  overflow-x: auto;
+  padding: 24px 10px;
+  background: #ece8df;
+}
+
+.shell-receipt {
+  flex: 0 0 auto;
+  margin-inline: auto;
+  padding: 3.4em 0.7em 2.2em;
+  overflow: hidden;
+  background: #fff;
+  color: #303033;
+  font-family: "Thermal VT323", "Courier New", monospace;
+  font-weight: 400;
+  line-height: 1.12;
+  -webkit-font-smoothing: auto;
+}
+
+.shell-receipt p {
+  margin: 0;
+}
+
+.shell-content {
+  position: relative;
+  overflow-wrap: anywhere;
+}
+
+.shell-header,
+.shell-footer {
+  text-align: center;
+}
+
+.shell-logo {
+  display: block;
+  width: 4.5em;
+  height: auto;
+  margin: 0 auto 0.6em;
+}
+
+.shell-paper-emblems {
+  position: absolute;
+  inset: -2.6em 0 0.8em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  opacity: 0.055;
+  pointer-events: none;
+}
+
+.shell-paper-emblem {
+  flex: 0 0 auto;
+  width: 5.25em;
+  height: 4.875em;
+  background: url("/shell-paper-logo-color.png") center / contain no-repeat;
+}
+
+.shell-separator {
+  overflow: hidden;
+  margin-block: 0.3em !important;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.shell-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6em;
+}
+
+.shell-row > :first-child {
+  min-width: 0;
+}
+
+.shell-row > :last-child {
+  flex-shrink: 0;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.shell-transaction {
+  flex-wrap: wrap;
+  column-gap: 0.4em;
+}
+
+.shell-transaction > :last-child {
+  max-width: 100%;
+  margin-left: auto;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.shell-cashier {
+  text-align: right;
+}
+
+.shell-fuel {
+  margin-top: 2.7em;
+}
+
+.shell-fuel-amount > :first-child {
+  padding-left: 1.7em;
+}
+
+.shell-discount {
+  margin-top: 1.6em;
+}
+
+.shell-totals {
+  margin-top: 1.6em;
+}
+
+.shell-invoice-total {
+  margin-top: 1.8em;
+}
+
+.shell-customer,
+.shell-loyalty {
+  margin-top: 1.8em;
+}
+
+.shell-footer {
+  line-height: 1.35;
+}
+
 @media (max-width: 720px) {
   .logo-controls {
     grid-template-columns: 1fr;
@@ -2971,6 +3110,16 @@ a {
 }
 
 @media print {
+  .legacy-receipt-stage[data-template="shell"] {
+    padding: 0;
+    overflow: visible;
+    background: white;
+  }
+
+  .shell-receipt {
+    break-inside: avoid;
+  }
+
   .legacy-receipt-stage {
     display: block;
     min-height: 0;

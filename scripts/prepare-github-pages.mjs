@@ -8,10 +8,11 @@ const repositoryName = process.env.GITHUB_REPOSITORY?.split("/")[1] ?? "";
 const customDomain = process.env.GITHUB_PAGES_CUSTOM_DOMAIN?.trim() ?? "";
 const isUserSite = repositoryName.endsWith(".github.io");
 const basePath = repositoryName && !isUserSite && !customDomain ? `/${repositoryName}` : "";
-const publicFonts = [
+const publicAssets = [
   "press-start-2p-latin.woff2",
   "nunito-sans-latin.woff2",
   "vt323-latin.woff2",
+  "shell-paper-logo-color.png",
 ];
 
 async function collectFiles(directory) {
@@ -34,25 +35,25 @@ if (basePath) {
     const original = await readFile(cssFile, "utf8");
     let updated = original;
 
-    for (const font of publicFonts) {
+    for (const asset of publicAssets) {
       updated = updated
-        .replaceAll(`url(/${font})`, `url(${basePath}/${font})`)
-        .replaceAll(`url("/${font}")`, `url("${basePath}/${font}")`)
-        .replaceAll(`url('/${font}')`, `url('${basePath}/${font}')`);
+        .replaceAll(`url(/${asset})`, `url(${basePath}/${asset})`)
+        .replaceAll(`url("/${asset}")`, `url("${basePath}/${asset}")`)
+        .replaceAll(`url('/${asset}')`, `url('${basePath}/${asset}')`);
     }
 
     if (updated !== original) await writeFile(cssFile, updated);
   }
 
-  const remainingRootFontReferences = await Promise.all(
+  const remainingRootAssetReferences = await Promise.all(
     cssFiles.map(async (cssFile) => {
       const css = await readFile(cssFile, "utf8");
-      return publicFonts.some((font) => css.includes(`/${font}`) && !css.includes(`${basePath}/${font}`));
+      return publicAssets.some((asset) => css.includes(`/${asset}`) && !css.includes(`${basePath}/${asset}`));
     }),
   );
 
-  if (remainingRootFontReferences.some(Boolean)) {
-    throw new Error("GitHub Pages font paths were not prepared correctly.");
+  if (remainingRootAssetReferences.some(Boolean)) {
+    throw new Error("GitHub Pages asset paths were not prepared correctly.");
   }
 }
 

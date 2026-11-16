@@ -1,11 +1,12 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { calculateShellSale, formatShellDate, shellDefaults, type ShellFields } from "./shell";
 
 type FuelType = "Petrol" | "Diesel" | "CNG" | "EV Charge";
-type TemplateId = "template1" | "template2" | "template3" | "template4" | "template5";
+type TemplateId = "template1" | "template2" | "template3" | "template4" | "template5" | "shell";
 
-type BillForm = {
+type BillForm = ShellFields & {
   stationName: string;
   dealerName: string;
   stationAddress: string;
@@ -79,7 +80,22 @@ const receiptTemplates: Array<{
   { id: "template3", name: "Template 3", description: "Thermal" },
   { id: "template4", name: "Template 4", description: "Detailed" },
   { id: "template5", name: "Template 5", description: "Printer copy" },
+  { id: "shell", name: "Shell", description: "Station receipt" },
 ];
+
+const shellDetailFields = [
+  { key: "siteId", label: "Site ID", placeholder: "e.g. 12170818" },
+  { key: "posNumber", label: "POS number", placeholder: "e.g. 1" },
+  { key: "fssaiNumber", label: "FSSAI number", placeholder: "Station food licence number" },
+  { key: "cashierName", label: "Cashier / operator", placeholder: "Operator name" },
+  { key: "fipNo", label: "Pump number", placeholder: "e.g. 04" },
+  { key: "shellProductName", label: "Printed fuel description", placeholder: "Unleaded (for Petrol)" },
+  { key: "itemPaymentMethod", label: "Fuel-line payment label", placeholder: "e.g. Cash" },
+  { key: "loyaltyName", label: "Loyalty programme", placeholder: "Shell Go+" },
+  { key: "loyaltyCustomerId", label: "Loyalty customer ID (masked)", placeholder: "000000*****0000" },
+  { key: "feedbackText", label: "Feedback prompt", placeholder: "Tell us about your visit at" },
+  { key: "feedbackUrl", label: "Feedback website", placeholder: "www.shell.com/india/tellshell" },
+] as const;
 
 const taxOptions: BillForm["taxMode"][] = ["None", "CST TIN", "GST TIN", "TXN NO"];
 const receiptDatabaseKey = "fuel-receipt-studio:history:v1";
@@ -88,6 +104,7 @@ const receiptHistoryLimit = 50;
 const sourceRepositoryUrl = "https://github.com/shantanu1258/fuel-receipt-studio";
 
 const initialForm: BillForm = {
+  ...shellDefaults,
   stationName: "GREENWAY FUEL STATION",
   dealerName: "GREENWAY AUTO SERVICES",
   stationAddress: "MAIN ROAD, BENGALURU 560001",
@@ -172,6 +189,9 @@ function normalizeStoredForm(value: unknown): BillForm | null {
     form.fuelType = initialForm.fuelType;
   }
   if (!taxOptions.includes(form.taxMode)) form.taxMode = initialForm.taxMode;
+  if (!["58", "80"].includes(form.shellPaperWidth)) {
+    form.shellPaperWidth = shellDefaults.shellPaperWidth;
+  }
   return form;
 }
 
@@ -383,7 +403,11 @@ export default function Home() {
   const rate = cleanNumber(form.rate);
   const total = cleanNumber(form.total);
   const quantity = rate > 0 && total > 0 ? total / rate : 0;
-  const canExport = Boolean(form.stationName.trim() && form.invoiceNumber.trim() && rate && total);
+  const shellSale = calculateShellSale(total, form.discountAmount);
+  const saleError = template === "shell" ? shellSale.error : null;
+  const canExport = Boolean(
+    form.stationName.trim() && form.invoiceNumber.trim() && rate && total && !saleError,
+  );
   const remoteLogo = getSafeLogoUrl(form.logoUrl);
   const logoSource = uploadedLogo?.src || remoteLogo;
   const visibleLogoSource = logoSource && logoSource !== failedLogoSource ? logoSource : "";
@@ -495,7 +519,7 @@ export default function Home() {
 
   function saveCurrentReceipt(successMessage = "Receipt saved to history") {
     if (!canExport) {
-      setMessage("Add the station, bill number, rate and amount before saving");
+      setMessage(saleError || "Add the station, bill number, rate and amount before saving");
       return "failed" as const;
     }
 
@@ -593,7 +617,7 @@ export default function Home() {
 
   function canCreateReceiptFile() {
     if (!canExport) {
-      setMessage("Add the station, bill number, rate and amount first");
+      setMessage(saleError || "Add the station, bill number, rate and amount first");
       return false;
     }
     if (visibleLogoSource && logoStatus === "loading") {
@@ -654,8 +678,10 @@ export default function Home() {
         },
       });
       const pixelsToPoints = 72 / 96;
-      const pageWidth = receiptWidth * pixelsToPoints;
-      const pageHeight = receiptHeight * pixelsToPoints;
+      const pageWidth = template === "shell"
+        ? Number(form.shellPaperWidth) * 72 / 25.4
+        : receiptWidth * pixelsToPoints;
+      const pageHeight = receiptHeight * pageWidth / receiptWidth;
       const pdf = new jsPDF({
         orientation: pageWidth > pageHeight ? "landscape" : "portrait",
         unit: "pt",
@@ -696,25 +722,46 @@ export default function Home() {
 
   async function copySummary() {
     if (!canExport) {
-      setMessage("Complete the required bill details before copying");
+      setMessage(saleError || "Complete the required bill details before copying");
       return;
     }
 
     const summaryLines = [
       "FUEL RECEIPT",
       form.stationName,
+      ...(template === "shell" && form.dealerName ? [form.dealerName] : []),
       form.stationAddress,
+      ...(template === "shell" ? [
+        ...(form.siteId ? [`Site ID: ${form.siteId}`] : []),
+        ...(form.taxMode !== "None" && form.taxValue
+          ? [`${form.taxMode === "GST TIN" ? "GSTIN" : taxLabel(form.taxMode)}: ${form.taxValue}`]
+          : []),
+        ...(form.fssaiNumber ? [`FSSAI: ${form.fssaiNumber}`] : []),
+        ...(form.posNumber ? [`POS: ${form.posNumber}`] : []),
+        ...(form.cashierName ? [`Cashier: ${form.cashierName}`] : []),
+        ...(form.fipNo ? [`Pump: ${form.fipNo}`] : []),
+      ] : []),
       `Receipt: ${form.invoiceNumber}`,
       `Date: ${formatDate(form.billDate)} ${form.billTime}`,
       ...(form.showCustomerName
         ? [`Customer: ${form.customerName || "Walk-in customer"}`]
         : []),
       `Vehicle: ${form.vehicleNumber || "Not provided"}`,
-      `Product: ${form.fuelType}`,
+      `Product: ${template === "shell" ? shellFuelDescription(form) : form.fuelType}`,
       `Rate: ${formatMoney(rate)} / ${selectedFuel.unit}`,
       `Quantity: ${quantity.toFixed(2)} ${selectedFuel.unit}`,
-      `Total: ${formatMoney(total)}`,
+      ...(template === "shell" ? [
+        `Fuel amount: ${formatMoney(total)}`,
+        ...(form.itemPaymentMethod ? [`Fuel-line payment: ${form.itemPaymentMethod}`] : []),
+        ...(shellSale.discount > 0
+          ? [`${form.discountDescription || "Discount"}: -${formatMoney(shellSale.discount)}`]
+          : []),
+        `Total invoice: ${shellSale.netTotal === null ? "Invalid discount" : formatMoney(shellSale.netTotal)}`,
+      ] : [`Total: ${formatMoney(total)}`]),
       `Payment: ${form.paymentMethod || "Not specified"}`,
+      ...(template === "shell" && form.loyaltyCustomerId
+        ? [`${form.loyaltyName || "Loyalty"} Customer ID: ${form.loyaltyCustomerId}`]
+        : []),
     ];
     const summary = summaryLines.join("\n");
 
@@ -735,6 +782,39 @@ export default function Home() {
     setLogoStatus("empty");
     if (logoInputRef.current) logoInputRef.current.value = "";
     setMessage("Form cleared");
+  }
+
+  function loadShellDemo() {
+    removeLogo();
+    setForm({
+      ...initialForm,
+      stationName: "Shell Bellandur",
+      dealerName: "AVIGHNA ENTERPRISES",
+      stationAddress: "No.80/2, Next to Hotel Citrus, ORR,\nBellandur, Bangalore-560 037",
+      invoiceNumber: "SHELL-DEMO",
+      billDate: "2026-07-26",
+      billTime: "19:51",
+      customerName: "SAMPLE CUSTOMER",
+      fipNo: "04",
+      rate: "127.98",
+      total: "4200.30",
+      atot: "4200.30",
+      vtot: "32.82",
+      paymentMethod: "Offline Card",
+      taxMode: "GST TIN",
+      taxValue: "DEMO-GSTIN",
+      siteId: "00000000",
+      posNumber: "1",
+      fssaiNumber: "DEMO-FSSAI",
+      cashierName: "SAMPLE CASHIER",
+      shellProductName: "Unleaded",
+      itemPaymentMethod: "Cash",
+      discountAmount: "70.00",
+      discountDescription: "Get 70/- off on fueling petrol",
+      loyaltyCustomerId: "000000*****0000",
+      footerText: "Thank you for visiting Shell",
+    });
+    setMessage("Shell demo loaded with sample identifiers; replace them with your own details");
   }
 
   function cloneSavedBill(bill: SavedBill) {
@@ -827,7 +907,7 @@ export default function Home() {
             </p>
             <div className="hero-points" aria-label="App highlights">
               <span><b>01</b> Live preview</span>
-              <span><b>02</b> Five layouts</span>
+              <span><b>02</b> Six layouts</span>
               <span><b>03</b> Save as PDF</span>
             </div>
           </div>
@@ -862,6 +942,19 @@ export default function Home() {
               </div>
               <span className="sample-label">Sample data</span>
             </div>
+
+            {template === "shell" && (
+              <div className="shell-template-help">
+                <p>
+                  Photo-matched Shell layout. The paper width is estimated at 80 mm; choose
+                  58 mm below if needed. Demo identifiers are placeholders, not the photo&apos;s
+                  customer details.
+                </p>
+                <button className="button button-ghost" type="button" onClick={loadShellDemo}>
+                  Replace fields with Shell demo
+                </button>
+              </div>
+            )}
 
             <fieldset className="form-section">
               <legend>Fuel station</legend>
@@ -914,7 +1007,7 @@ export default function Home() {
                     placeholder="FG-0001"
                   />
                 </label>
-                <div className="field">
+                {template !== "shell" && <div className="field">
                   <div className="field-label-row">
                     <label htmlFor="fcc-code">FCC code / ID</label>
                     <label className="receipt-visibility-toggle">
@@ -933,8 +1026,8 @@ export default function Home() {
                     placeholder="e.g. 000000000"
                     inputMode="numeric"
                   />
-                </div>
-                <div className="field fcc-visibility-field">
+                </div>}
+                {template !== "shell" && <div className="field fcc-visibility-field">
                   <span>FCC receipt lines</span>
                   <div className="visibility-options">
                     <label className="receipt-visibility-toggle">
@@ -954,7 +1047,7 @@ export default function Home() {
                       <span>Show FCC time</span>
                     </label>
                   </div>
-                </div>
+                </div>}
                 <div className="tax-settings field-span-two">
                   <span className="tax-title" id="tax-type-label">Tax Type</span>
                   <div className="tax-options" role="radiogroup" aria-labelledby="tax-type-label">
@@ -1108,19 +1201,20 @@ export default function Home() {
                     <option>Online</option>
                     <option>Debit Card</option>
                     <option>Credit Card</option>
+                    <option>Offline Card</option>
                     <option>Wallet</option>
                   </select>
                 </label>
               </div>
               <div className="field-grid two receipt-wording-fields">
-                <label className="field">
+                {template !== "shell" && <label className="field">
                   <span>Top welcome text</span>
                   <input
                     value={form.welcomeText}
                     onChange={(event) => updateField("welcomeText", event.target.value)}
                     placeholder="Welcomes You"
                   />
-                </label>
+                </label>}
                 <label className="field">
                   <span>Bottom footer text</span>
                   <input
@@ -1131,6 +1225,49 @@ export default function Home() {
                 </label>
               </div>
             </fieldset>
+
+            {template === "shell" && (
+              <fieldset className="form-section">
+                <legend>Shell receipt details</legend>
+                <div className="field-grid two">
+                  {shellDetailFields.map((field) => (
+                    <label className="field" key={field.key}>
+                      <span>{field.label}</span>
+                      <input
+                        value={form[field.key]}
+                        onChange={(event) => updateField(field.key, event.target.value)}
+                        placeholder={field.placeholder}
+                      />
+                    </label>
+                  ))}
+                  <label className="field">
+                    <span>Receipt paper width</span>
+                    <select
+                      value={form.shellPaperWidth}
+                      onChange={(event) =>
+                        updateField("shellPaperWidth", event.target.value === "58" ? "58" : "80")
+                      }
+                    >
+                      <option value="80">80 mm (estimated from photo)</option>
+                      <option value="58">58 mm</option>
+                    </select>
+                  </label>
+                  <label className="receipt-visibility-toggle field-span-two">
+                    <input
+                      type="checkbox"
+                      checked={form.showShellWatermarks}
+                      onChange={(event) => updateField("showShellWatermarks", event.target.checked)}
+                    />
+                    <span>Show faint Shell paper emblems</span>
+                  </label>
+                </div>
+                <p className="logo-help">
+                  Leave optional fields blank to omit them. The fuel-line label can differ
+                  from the payment method in the totals, as in the supplied photo.
+                  Printed fuel description overrides the fuel name only on this template.
+                </p>
+              </fieldset>
+            )}
 
             <fieldset className="form-section">
               <legend>Fuel & amount</legend>
@@ -1168,7 +1305,7 @@ export default function Home() {
                   />
                 </label>
                 <label className="field money-field">
-                  <span>Total amount <b>*</b></span>
+                  <span>{template === "shell" ? "Fuel amount (before discount)" : "Total amount"} <b>*</b></span>
                   <span className="input-prefix" aria-hidden="true">₹</span>
                   <input
                     required
@@ -1182,7 +1319,35 @@ export default function Home() {
                   />
                 </label>
               </div>
-              <div className="field-grid two totalizer-grid">
+              {template === "shell" && (
+                <div className="field-grid two totalizer-grid">
+                  <label className="field">
+                    <span>Discount amount</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max={total}
+                      step="0.01"
+                      value={form.discountAmount}
+                      onChange={(event) => updateField("discountAmount", event.target.value)}
+                      placeholder="0.00"
+                      inputMode="decimal"
+                      aria-invalid={Boolean(saleError)}
+                      aria-describedby={saleError ? "shell-sale-error" : undefined}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Discount description</span>
+                    <input
+                      value={form.discountDescription}
+                      onChange={(event) => updateField("discountDescription", event.target.value)}
+                      placeholder="e.g. Get 70/- off on fueling petrol"
+                    />
+                  </label>
+                  {saleError && <p id="shell-sale-error" className="logo-error field-span-two" role="alert">{saleError}</p>}
+                </div>
+              )}
+              {template !== "shell" && <div className="field-grid two totalizer-grid">
                 <label className="field">
                   <span>ATOT</span>
                   <input
@@ -1201,15 +1366,22 @@ export default function Home() {
                     inputMode="decimal"
                   />
                 </label>
-              </div>
+              </div>}
               <div className="calculation-strip">
                 <span>Calculated quantity</span>
                 <strong>{quantity.toFixed(2)} {selectedFuel.unit}</strong>
-                <small>Total ÷ rate</small>
+                <small>{template === "shell" ? "Fuel amount before discount ÷ rate" : "Total ÷ rate"}</small>
               </div>
+              {template === "shell" && (
+                <div className="calculation-strip">
+                  <span>Total invoice</span>
+                  <strong>{shellSale.netTotal === null ? "--" : formatMoney(shellSale.netTotal)}</strong>
+                  <small>Fuel amount minus discount</small>
+                </div>
+              )}
             </fieldset>
 
-            <details className="advanced-fields">
+            {template !== "shell" && <details className="advanced-fields">
               <summary>
                 <span>Pump IDs</span>
                 <small>Optional</small>
@@ -1252,7 +1424,7 @@ export default function Home() {
                   </label>
                 </div>
               </div>
-            </details>
+            </details>}
 
             <div className="form-actions">
               <button className="button button-ghost" type="button" onClick={clearForm}>
@@ -1362,6 +1534,17 @@ export default function Home() {
                   onLogoError={handleLogoDisplayError}
                 />
               )}
+              {template === "shell" && (
+                <ShellReceipt
+                  form={form}
+                  logoSource={visibleLogoSource}
+                  rate={rate}
+                  total={total}
+                  quantity={quantity}
+                  onLogoLoad={() => setLogoStatus("ready")}
+                  onLogoError={handleLogoDisplayError}
+                />
+              )}
             </div>
           </aside>
         </section>
@@ -1414,7 +1597,7 @@ export default function Home() {
                       <dl className="history-details">
                         <div><dt>Bill date</dt><dd>{formatDate(bill.form.billDate)}</dd></div>
                         <div><dt>Vehicle</dt><dd>{bill.form.vehicleNumber || "Not provided"}</dd></div>
-                        <div><dt>Amount</dt><dd>{formatMoney(cleanNumber(bill.form.total))}</dd></div>
+                        <div><dt>Amount</dt><dd>{formatSavedAmount(bill)}</dd></div>
                       </dl>
                       <div className="history-card-actions">
                         <button type="button" onClick={() => cloneSavedBill(bill)}>
@@ -1486,6 +1669,17 @@ type ReceiptProps = {
   onLogoLoad: () => void;
   onLogoError: () => void;
 };
+
+function formatSavedAmount(bill: SavedBill) {
+  const total = cleanNumber(bill.form.total);
+  if (bill.template !== "shell") return formatMoney(total);
+  const sale = calculateShellSale(total, bill.form.discountAmount);
+  return sale.netTotal === null ? "Invalid discount" : formatMoney(sale.netTotal);
+}
+
+function shellFuelDescription(form: BillForm) {
+  return form.shellProductName.trim() || (form.fuelType === "Petrol" ? "Unleaded" : form.fuelType);
+}
 
 function ReceiptLogo({
   source,
@@ -1963,6 +2157,103 @@ function TemplateFiveReceipt({
         <p className="template5-footer">
           {form.footerText || "Thank You! Please Visit Again."}
         </p>
+      </div>
+    </article>
+  );
+}
+
+function ShellReceipt({
+  form,
+  logoSource,
+  rate,
+  total,
+  quantity,
+  onLogoLoad,
+  onLogoError,
+}: ReceiptProps) {
+  const sale = calculateShellSale(total, form.discountAmount);
+  const unit = fuelOptions.find((fuel) => fuel.value === form.fuelType)?.unit || "L";
+  const netAmount = sale.netTotal === null ? "--" : sale.netTotal.toFixed(2);
+  const idLabel = form.taxMode === "GST TIN" ? "GSTIN" : taxLabel(form.taxMode);
+  const separator = "*".repeat(42);
+
+  return (
+    <article
+      id="receipt"
+      className="legacy-template shell-receipt"
+      aria-label="Generated fuel receipt preview"
+      style={{ width: `${form.shellPaperWidth}mm`, fontSize: `${Number(form.shellPaperWidth) * 0.205}px` }}
+    >
+      {form.showShellWatermarks && (
+        <div className="shell-paper-emblems" aria-hidden="true">
+          {[0, 1, 2, 3].map((index) => <span className="shell-paper-emblem" key={index} />)}
+        </div>
+      )}
+      <div className="shell-content">
+        <header className="shell-header">
+          <ReceiptLogo
+            source={logoSource}
+            className="shell-logo"
+            onLoad={onLogoLoad}
+            onError={onLogoError}
+          />
+          <p>{form.stationName}{form.siteId && ` - Site ID: ${form.siteId}`}</p>
+          {form.dealerName && <p>{form.dealerName}</p>}
+          {form.stationAddress && <p className="legacy-pre-line">{form.stationAddress}</p>}
+          {form.stationPhone && <p>Tel: {form.stationPhone}</p>}
+          {form.taxMode !== "None" && form.taxValue && <p>{idLabel}: {form.taxValue}</p>}
+          {form.fssaiNumber && <p>FSSAI: {form.fssaiNumber}</p>}
+        </header>
+
+        <p className="shell-separator" aria-hidden="true">{separator}</p>
+        <div className="shell-row shell-transaction">
+          <span>{formatShellDate(form.billDate)} {form.billTime}{form.posNumber && ` POS:${form.posNumber}`}</span>
+          <span>#{form.invoiceNumber.replace(/^#/, "")}</span>
+        </div>
+        {form.cashierName && <p className="shell-cashier">{form.cashierName}</p>}
+
+        <section className="shell-fuel" aria-label="Fuel sale">
+          <p>{[form.fipNo, shellFuelDescription(form), form.itemPaymentMethod].filter(Boolean).join(" - ")}</p>
+          <div className="shell-row shell-fuel-amount">
+            <span>{quantity.toFixed(2)}{unit} x {rate.toFixed(2)}Rs./{unit}</span>
+            <span>Rs. {total.toFixed(2)}</span>
+          </div>
+        </section>
+
+        {sale.discount > 0 && (
+          <div className="shell-row shell-discount">
+            <span>{form.discountDescription || "Discount"}</span>
+            <span>Rs. -{sale.discount.toFixed(2)}</span>
+          </div>
+        )}
+        <section className="shell-totals" aria-label="Payment summary">
+          <div className="shell-row"><span>Sale Total</span><span>Rs. {netAmount}</span></div>
+          {form.paymentMethod && (
+            <div className="shell-row"><span>{form.paymentMethod}</span><span>Rs. {netAmount}</span></div>
+          )}
+          <div className="shell-row shell-invoice-total">
+            <span>TOTAL INVOICE</span><span>Rs. {netAmount}</span>
+          </div>
+        </section>
+
+        {((form.showCustomerName && form.customerName) || form.vehicleNumber) && (
+          <section className="shell-customer" aria-label="Customer details">
+            {form.showCustomerName && form.customerName && <p>{form.customerName}</p>}
+            {form.vehicleNumber && <p>Vehicle Registered: {form.vehicleNumber}</p>}
+          </section>
+        )}
+        {form.loyaltyCustomerId && (
+          <section className="shell-loyalty" aria-label="Loyalty details">
+            {form.loyaltyName && <p>{form.loyaltyName}</p>}
+            <p>Customer ID: {form.loyaltyCustomerId}</p>
+          </section>
+        )}
+        <p className="shell-separator" aria-hidden="true">{separator}</p>
+        <footer className="shell-footer">
+          {form.footerText && <p>{form.footerText}</p>}
+          {form.feedbackText && <p>{form.feedbackText}</p>}
+          {form.feedbackUrl && <p>{form.feedbackUrl}</p>}
+        </footer>
       </div>
     </article>
   );

@@ -33,11 +33,13 @@ test("server-renders the fuel receipt studio", async () => {
   const html = await response.text();
   assert.match(html, /<title>Fuel Receipt Studio \| Fuel Bill Generator<\/title>/i);
   assert.match(html, /Turn fill-ups into/);
-  assert.match(html, /Five layouts/);
+  assert.match(html, /Six layouts/);
   assert.match(html, /Build your receipt/);
   assert.match(html, /Live Preview/);
   assert.match(html, /Preview Only/);
   assert.match(html, /Template 5/);
+  assert.match(html, />Shell<\/b>/);
+  assert.match(html, /Station receipt/);
   assert.match(html, /Download receipt PDF/);
   assert.match(html, /Print receipt/);
   assert.match(html, /Save bill/);
